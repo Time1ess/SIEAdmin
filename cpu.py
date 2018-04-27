@@ -99,7 +99,6 @@ class PrioritiyScheduler(Daemon):
         for user, user_processes in processes.items():
             for p in user_processes:
                 user_ram[user] += p.mem
-        logging.info(user_ram)
         for user, ram in user_ram.items():
             if ram > self.ram_intervene:
                 uid = get_uid(user)
