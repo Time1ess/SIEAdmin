@@ -7,7 +7,7 @@ import time
 
 from collections import defaultdict
 
-from core.system import SystemStatus
+from core.system import SystemStatus, get_uid
 from core.daemon import Daemon
 from utils import build_rescaler, round_by
 
@@ -18,21 +18,46 @@ class PrioritiyScheduler(Daemon):
     __exit_now = False
     __exited = False
 
-
-    def __init__(self, intervene_load=20, interval=30,
-                 pidfile='/tmp/SIE_priority_schedulerd.pid'):
+    def __init__(self, cpu_intervene=20, ram_intervene=40, interval=30,
+                 pidfile='/tmp/SIE_priority_schedulerd.pid',
+                 scheduler='user_cpu_fair_scheduler'):
+        """
+        Parameters
+        ----------
+        cpu_intervene: float
+            Scheduler will intervene when average CPU load in 1 minute reach
+            this value. Default: 20.
+        ram_intervene: float
+            Scheduler will punish user when user RAM reatch this value, only
+            for user_ram_penalty_scheduler and cpu_ram_hybrid_scheduler.
+            Default: 40 (in percent).
+        interval: int
+            How often the scheduler should run. Default: 30 (seconds).
+        pidfile: str
+            Path to pidfile. Default: /tmp/SIE_priority_schedulerd.pid.
+        scheduler: str
+            Which scheduler algorithm should use.
+            Default: user_cpu_fair_scheduler.
+        """
         super(PrioritiyScheduler, self).__init__(pidfile)
-        self.intervene_load = intervene_load
+        self.cpu_intervene = cpu_intervene
+        self.ram_intervene = ram_intervene
         self.interval = interval
+        self.scheduler = getattr(self, scheduler, None)
+        if self.scheduler is None:
+            logging.critical('No such scheduler')
+            raise AttributeError('No such scheduler')
         signal.signal(signal.SIGTERM, self.__exit)
 
     def __exit(self, *args, **kwargs):
+        """SIGTERM handler."""
         if self.__exit_now:
             return
         logging.info('>>> PrioritiyScheduler <<< deactivating')
         self.__exit_now = True
 
     def load_stats(self):
+        """Load process status from SystemStatus."""
         process_states = self.ss.process_states
         valid_users = os.listdir('/home')
         processes = defaultdict(list)
@@ -43,8 +68,8 @@ class PrioritiyScheduler(Daemon):
                 user_processes_cnt[ps.user] += 1
         return processes, user_processes_cnt
 
-    def user_fair_scheduler(self, *stats):
-        """Faier scheduler for users.
+    def user_cpu_fair_scheduler(self, *stats):
+        """Fair scheduler for users.
 
         Guarantee that each user will have fair CPU computing power.
         """
@@ -61,11 +86,39 @@ class PrioritiyScheduler(Daemon):
         priorities = {pid: round(rescaler(pri))
                       for pid, pri in priorities.items()}
         for pid, pri in priorities.items():
-            self.__renice(pid, pri)
+            self.__renice(pid=pid, pri=pri)
+
+    def user_ram_penalty_scheduler(self, *stats):
+        """Penalty scheduler for RAM.
+
+        Punish users who use RAM more than <ram_intervene> %
+        by renice process to 19(lowest priority).
+        """
+        processes, *_ = stats
+        user_ram = defaultdict(float)
+        for user, user_processes in processes.items():
+            for p in user_processes:
+                user_ram[user] += p.mem
+        logging.info(user_ram)
+        for user, ram in user_ram.items():
+            if ram > self.ram_intervene:
+                uid = get_uid(user)
+                self.__renice(uid=uid, pri=19)
+
+    def cpu_ram_hybrid_scheduler(self, *stats):
+        """Append user_ram_penalty_scheduler after user_cpu_fair_scheduler."""
+        self.user_cpu_fair_scheduler(*stats)
+        self.user_ram_penalty_scheduler(*stats)
 
     @staticmethod
-    def __renice(pid, pri=0):
-        cmd = 'renice -n %d -p %d' % (pri, pid)
+    def __renice(pid=None, uid=None, pri=0):
+        """Renice by pid or uid."""
+        if not pid and not uid:
+            raise ValueError('Must provide pid or uid')
+        elif pid:
+            cmd = 'renice -n %d -p %d' % (pri, pid)
+        else:
+            cmd = 'renice -n %d -u %d' % (pri, uid)
         logging.debug(cmd)
         os.popen(cmd)
 
@@ -75,26 +128,23 @@ class PrioritiyScheduler(Daemon):
         for user, processes in processes.items():
             for process in processes:
                 pid = process.pid
-                self.__renice(pid)
+                self.__renice(pid=pid)
 
-    def run(self, scheduler='user_fair_scheduler'):
+    def run(self):
+        """Scheduler core."""
         logging.info('>>> PrioritiyScheduler <<< activated'
-                     '(load: %d, interval: %d)' % (self.intervene_load,
+                     '(load: %d, interval: %d)' % (self.cpu_intervene,
                                                    self.interval))
-        scheduler = getattr(self, scheduler, None)
-        if scheduler is None:
-            logging.critical('No such scheduler')
-            raise AttributeError('No such scheduler')
         try:
             while True:
                 load_1m, load_5m, load_15m = self.ss.system_load
-                if load_1m < self.intervene_load:
+                if load_1m < self.cpu_intervene:
                     msg = 'CPU idle(%f, %f, %f), go to sleep.' % (
                         load_1m, load_5m, load_15m)
                     logging.info(msg)
                 else:
                     stats = self.load_stats()
-                    scheduler(*stats)
+                    self.scheduler(*stats)
                     msg = 'Renice finished, go to sleep.'
                     logging.info(msg)
                 for _ in range(int(self.interval)):
@@ -114,11 +164,16 @@ class PrioritiyScheduler(Daemon):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('command', choices=['start', 'stop', 'restart'])
-    parser.add_argument('--intervene_load', default=20, type=float)
+    parser.add_argument('--cpu_intervene', default=20, type=float)
+    parser.add_argument('--ram_intervene', default=40, type=float)
     parser.add_argument('--interval', default=30, type=int)
+    parser.add_argument('--scheduler', default='cpu_ram_hybrid_scheduler',
+                        type=str)
     args = parser.parse_args()
-    daemon = PrioritiyScheduler(interval=args.interval,
-                                intervene_load=args.intervene_load)
+    daemon = PrioritiyScheduler(cpu_intervene=args.cpu_intervene,
+                                ram_intervene=args.ram_intervene,
+                                interval=args.interval,
+                                scheduler=args.scheduler)
     if 'start' == args.command:
         daemon.start()
     elif 'stop' == args.command:

@@ -43,8 +43,6 @@ class SystemStatus(object):
         def valid_process_state(state):
             if str(state.pid) not in pid_to_user:
                 return False
-            if state.cpu < 10:
-                return False
             return True
 
         states = [state for state in states if valid_process_state(state)]
@@ -60,7 +58,12 @@ class SystemStatus(object):
         return [ProcessState(*x.split(maxsplit=8)) for x in data]
 
 
+def get_uid(username):
+    return int(os.popen('id -u %s' % username).read())
+
+
 if __name__ == '__main__':
     ss = SystemStatus()
     print(ss.system_load)
-    print(ss.process_states)
+    # print(ss.process_states)
+    print(get_uid('cmh'))
