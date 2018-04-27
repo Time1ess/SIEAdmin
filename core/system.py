@@ -58,6 +58,9 @@ class SystemStatus(object):
         return [ProcessState(*x.split(maxsplit=8)) for x in data]
 
 
+system_status = SystemStatus()
+
+
 def get_uid(username):
     return int(os.popen('id -u %s' % username).read())
 
@@ -65,5 +68,4 @@ def get_uid(username):
 if __name__ == '__main__':
     ss = SystemStatus()
     print(ss.system_load)
-    # print(ss.process_states)
-    print(get_uid('cmh'))
+    print(ss.process_states)
