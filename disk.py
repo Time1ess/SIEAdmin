@@ -12,6 +12,7 @@ import utils
 
 from core.daemon import Daemon
 from core.system import system_status
+from config import config
 
 
 class DiskUsageMonitor(Daemon):
@@ -20,18 +21,11 @@ class DiskUsageMonitor(Daemon):
     __exit_now = False
     __exited = False
 
-    def __init__(self, user_quota='20G', interval=60,
-                 pidfile='/tmp/SIE_disk_usage_monitord.pid'):
-        """Initialization.
-
-        Parameters
-        ----------
-        user_quota: str
-            Quota of home size per user. Default: '20G'.
-        interval: int
-            How often the monitor should run. Default: 60 (seconds).
-        """
+    def __init__(self):
+        """Initialization."""
+        pidfile = config['disk']['pidfile']
         super(DiskUsageMonitor, self).__init__(pidfile)
+        user_quota = config['disk']['user_quota']
         num, unit = re.findall(r'(\d+)([kKmMgG]{1})', user_quota)[0]
         quota_bytes = int(num)
         if unit in 'mM':
@@ -40,7 +34,7 @@ class DiskUsageMonitor(Daemon):
             quota_bytes *= 1024 ** 2
         self.quota_bytes = quota_bytes
         self._quota = user_quota
-        self.interval = interval
+        self.interval = config.getint('disk', 'interval')
         signal.signal(signal.SIGTERM, self.__exit)
 
     def __exit(self, *args, **kwargs):
@@ -117,11 +111,8 @@ class DiskUsageMonitor(Daemon):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('command', choices=['start', 'stop', 'restart'])
-    parser.add_argument('--user_quota', default='20G', type=str)
-    parser.add_argument('--interval', default=60, type=int)
     args = parser.parse_args()
-    daemon = DiskUsageMonitor(user_quota=args.user_quota,
-                              interval=args.interval)
+    daemon = DiskUsageMonitor()
     if 'start' == args.command:
         daemon.start()
     elif 'stop' == args.command:

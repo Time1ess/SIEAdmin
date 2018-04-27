@@ -10,6 +10,7 @@ from collections import defaultdict
 from core.system import system_status, get_uid
 from core.daemon import Daemon
 from utils import build_rescaler, round_by
+from config import config
 
 
 class PriorityScheduler(Daemon):
@@ -18,32 +19,14 @@ class PriorityScheduler(Daemon):
     __exit_now = False
     __exited = False
 
-    def __init__(self, cpu_intervene=20, ram_intervene=40, interval=30,
-                 pidfile='/tmp/SIE_priority_schedulerd.pid',
-                 scheduler='user_cpu_fair_scheduler'):
-        """Initialization.
-
-        Parameters
-        ----------
-        cpu_intervene: float
-            Scheduler will intervene when average CPU load in 1 minute reach
-            this value. Default: 20.
-        ram_intervene: float
-            Scheduler will punish user when user RAM reatch this value, only
-            for user_ram_penalty_scheduler and cpu_ram_hybrid_scheduler.
-            Default: 40 (in percent).
-        interval: int
-            How often the scheduler should run. Default: 30 (seconds).
-        pidfile: str
-            Path to pidfile. Default: /tmp/SIE_priority_schedulerd.pid.
-        scheduler: str
-            Which scheduler algorithm should use.
-            Default: user_cpu_fair_scheduler.
-        """
+    def __init__(self):
+        """Initialization."""
+        pidfile = config['cpu']['pidfile']
         super(PriorityScheduler, self).__init__(pidfile)
-        self.cpu_intervene = cpu_intervene
-        self.ram_intervene = ram_intervene
-        self.interval = interval
+        self.cpu_intervene = config.getint('cpu', 'cpu_intervene')
+        self.ram_intervene = config.getint('cpu', 'ram_intervene')
+        self.interval = config.getint('cpu', 'interval')
+        scheduler = config['cpu']['scheduler']
         self.scheduler = getattr(self, scheduler, None)
         if self.scheduler is None:
             logging.critical('No such scheduler')
@@ -170,16 +153,8 @@ class PriorityScheduler(Daemon):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('command', choices=['start', 'stop', 'restart'])
-    parser.add_argument('--cpu_intervene', default=20, type=float)
-    parser.add_argument('--ram_intervene', default=40, type=float)
-    parser.add_argument('--interval', default=60, type=int)
-    parser.add_argument('--scheduler', default='cpu_ram_hybrid_scheduler',
-                        type=str)
     args = parser.parse_args()
-    daemon = PriorityScheduler(cpu_intervene=args.cpu_intervene,
-                               ram_intervene=args.ram_intervene,
-                               interval=args.interval,
-                               scheduler=args.scheduler)
+    daemon = PriorityScheduler()
     if 'start' == args.command:
         daemon.start()
     elif 'stop' == args.command:

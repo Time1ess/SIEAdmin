@@ -1,12 +1,13 @@
 """Userful tools for SIE Server Admin."""
 import logging
 
+from config import config
+
 
 logging.basicConfig(
-    filename='SIEAdmin.log',
-    format=('%(asctime)s:%(levelname)s:%(filename)s'
-            '[line:%(lineno)d]:%(message)s'),
-    datefmt='%Y-%m-%d %H:%M:%S %A',
+    filename=config['logging']['logfile'],
+    format=config['logging']['logfmt'],
+    datefmt=config['logging']['datefmt'],
     level=logging.INFO)
 
 
