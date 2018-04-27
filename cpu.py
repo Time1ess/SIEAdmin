@@ -26,6 +26,7 @@ class PriorityScheduler(Daemon):
         self.cpu_intervene = config.getint('cpu', 'cpu_intervene')
         self.ram_intervene = config.getint('cpu', 'ram_intervene')
         self.interval = config.getint('cpu', 'interval')
+        self.excluded_users = config['cpu']['excluded'].split(',')
         scheduler = config['cpu']['scheduler']
         self.scheduler = getattr(self, scheduler, None)
         if self.scheduler is None:
@@ -49,6 +50,8 @@ class PriorityScheduler(Daemon):
         user_processes_cnt = defaultdict(int)
         for ps in process_states:
             if ps.user in valid_users:
+                if ps.user in self.excluded_users:
+                    continue
                 processes[ps.user].append(ps)
                 user_processes_cnt[ps.user] += 1
         return processes, user_processes_cnt

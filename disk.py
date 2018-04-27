@@ -35,6 +35,7 @@ class DiskUsageMonitor(Daemon):
         self.quota_bytes = quota_bytes
         self._quota = user_quota
         self.interval = config.getint('disk', 'interval')
+        self.excluded_users = config['cpu']['excluded'].split(',')
         signal.signal(signal.SIGTERM, self.__exit)
 
     def __exit(self, *args, **kwargs):
@@ -78,9 +79,9 @@ class DiskUsageMonitor(Daemon):
         base_dir = '/home'
         disk_usage = {}
         for user_name in os.listdir(base_dir):
-            path = osp.join(base_dir, user_name)
-            if user_name.startswith('.'):
+            if user_name.startswith('.') or user_name in self.excluded_users:
                 continue
+            path = osp.join(base_dir, user_name)
             usage, _ = os.popen('du -s %s' % path).read().split()
             usage = int(usage)
             disk_usage[user_name] = usage
