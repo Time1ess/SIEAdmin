@@ -19,6 +19,8 @@ app = Flask(__name__)
 
 def read_processed_users():
     processed_users_file = config['users']['processed_users_file']
+    if not osp.exists(processed_users_file):
+        return {}
     with open(processed_users_file) as f:
         processed = dict([l.strip().split() for l in f])
     return processed
@@ -34,6 +36,8 @@ def write_processed(student_id, username):
 
 def read_users():
     users_file = config['users']['users_file']
+    if not osp.exists(users_file):
+        return {}
     with open(users_file) as f:
         users = dict([l.strip().split() for l in f])
     return users
@@ -81,7 +85,7 @@ def register_form():
 function check_input()
 {
     var inputs = document.getElementsByTagName('input');
-    for(var i = 0; i < inputs.length - 1; i++)
+    for(var i = 1; i < inputs.length - 1; i++)
         if(inputs[i].value == '')
         {
             alert("请完成表单填写!");
@@ -99,7 +103,7 @@ function check_input()
     <p1>自助注册</p1>
     <form method="POST" action="/register"  onSubmit="return check_input();">
     <p>
-        <span>用户名:</span><input type="text" name="username" />
+        <span>用户名:</span><input type="text" name="username" placeholder="不输入则默认为学号"/>
     </p>
     <p>
         <span>密码:</span><input type="password" name="password" />
@@ -145,6 +149,7 @@ def main():
 
 
 if __name__ == '__main__':
+    app.run('0.0.0.0')
     try:
         main()
     except Exception as e:
