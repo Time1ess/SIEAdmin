@@ -149,7 +149,6 @@ def main():
 
 
 if __name__ == '__main__':
-    app.run('0.0.0.0')
     try:
         main()
     except Exception as e:
