@@ -1,2 +1,4 @@
 *.log
+users.txt
+processed_users.txt
 __pycache__
