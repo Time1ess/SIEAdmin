@@ -1,10 +1,16 @@
+import argparse
+import logging
 import os
 import os.path as osp
+import sys
 import time
 import re
 
 from flask import Flask, request
 
+import utils
+
+from core.daemon import Daemon
 from config import config
 
 
@@ -21,7 +27,9 @@ def read_processed_users():
 def write_processed(student_id, username):
     processed_users_file = config['users']['processed_users_file']
     with open(processed_users_file, 'a') as f:
-        f.write('%s %s\n' % (student_id, username))
+        msg = '%s %s' % (student_id, username)
+        f.write(msg + '\n')
+    logging.info('Registration succeed: ' + msg)
 
 
 def read_users():
@@ -35,21 +43,23 @@ def read_users():
 def register():
     processed_users = read_processed_users()
     users = read_users()
-    username = request.form['username']
+    username = request.form['username'] or request.form['student_id']
     password = request.form['password']
     confirm_password = request.form['confirm_password']
     student_id = request.form['student_id']
     student_name = request.form['student_name']
     if not username or re.sub(r'^[a-zA-Z0-9]+$', '', username) != '':
-        return '用户名包含非法字符!'
+        msg = '用户名包含非法字符!'
     elif password != confirm_password:
-        return '密码前后不一致!'
+        msg = '密码前后不一致!'
     elif student_id not in users:
-        return '学号不在受邀注册范围内!'
+        msg = '学号不在受邀注册范围内!'
     elif student_id in processed_users:
-        return '学号已被注册!'
+        msg = '学号已被注册!'
     elif student_name != users[student_id]:
-        return '学号姓名不匹配!'
+        msg = '学号姓名不匹配!'
+    logging.info('Registration failed: ' + msg + '(%s)' % str(request.form))
+    return msg
     try:
         p = os.popen('useradd -m %s -s /bin/bash' % username)
         if p.close() is not None:
@@ -111,5 +121,31 @@ function check_input()
 '''
 
 
+class UserRegistration(Daemon):
+    def __init__(self):
+        pidfile = config['users']['pidfile']
+        super(UserRegistration, self).__init__(pidfile)
+
+    def run(self):
+        app.run('0.0.0.0')
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('command', choices=['start', 'stop', 'restart'])
+    args = parser.parse_args()
+    daemon = UserRegistration()
+    if 'start' == args.command:
+        daemon.start()
+    elif 'stop' == args.command:
+        daemon.stop()
+    elif 'restart' == args.command:
+        daemon.restart()
+    sys.exit(0)
+
+
 if __name__ == '__main__':
-    app.run('0.0.0.0')
+    try:
+        main()
+    except Exception as e:
+        print(e)
