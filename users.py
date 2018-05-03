@@ -52,6 +52,7 @@ def register():
     confirm_password = request.form['confirm_password']
     student_id = request.form['student_id']
     student_name = request.form['student_name']
+    msg = ''
     if not username or re.sub(r'^[a-zA-Z0-9]+$', '', username) != '':
         msg = '用户名包含非法字符!'
     elif password != confirm_password:
@@ -62,8 +63,10 @@ def register():
         msg = '学号已被注册!'
     elif student_name != users[student_id]:
         msg = '学号姓名不匹配!'
-    logging.info('Registration failed: ' + msg + '(%s)' % str(request.form))
-    return msg
+    if msg:
+        logging.info(
+            'Registration failed: ' + msg + '(%s)' % str(request.form))
+        return msg
     try:
         p = os.popen('useradd -m %s -s /bin/bash' % username)
         if p.close() is not None:
